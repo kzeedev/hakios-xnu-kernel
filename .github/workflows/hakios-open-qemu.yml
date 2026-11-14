@@ -57,17 +57,40 @@ jobs:
             https://github.com/sbingner/llvm-project/releases/latest/download/linux-ios-arm64e-clang-toolchain.tar.lzma \
             -o "$tmp/toolchain.tar.lzma"
           tar --lzma -xf "$tmp/toolchain.tar.lzma" -C "$tmp"
-          toolchain_dir="$(find "$tmp" -mindepth 1 -maxdepth 2 -type d -name ios-arm64e-clang-toolchain -print -quit)"
+          toolchain_dir="$(find "$tmp" -mindepth 1 -maxdepth 4 -type d -name ios-arm64e-clang-toolchain -print -quit)"
           if [ -z "$toolchain_dir" ]; then
-            echo "Could not find ios-arm64e-clang-toolchain in the downloaded archive" >&2
+            echo "Could not find ios-arm64e-clang-toolchain in downloaded archive; extracted paths:" >&2
+            find "$tmp" -mindepth 1 -maxdepth 3 -print >&2
             exit 1
           fi
           cp -a "$toolchain_dir/." "$THEOS/toolchain/linux/iphone/"
 
-          git clone --depth 1 --filter=blob:none --sparse \
-            https://github.com/theos/sdks.git "$tmp/sdks"
-          git -C "$tmp/sdks" sparse-checkout set iPhoneOS16.5.sdk
-          cp -a "$tmp/sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
+          # GitHub's HTTP/2 transport can intermittently fail on large filtered
+          # clones. Retry the SDK checkout over HTTP/1.1, then verify the SDK.
+          sdk_repo="$tmp/sdks"
+          clone_ok=false
+          for attempt in 1 2 3; do
+            rm -rf "$sdk_repo"
+            if git -c http.version=HTTP/1.1 clone --depth 1 --filter=blob:none --sparse \
+              https://github.com/theos/sdks.git "$sdk_repo"; then
+              clone_ok=true
+              break
+            fi
+            echo "SDK repository clone attempt $attempt failed; retrying..." >&2
+            sleep "$attempt"
+          done
+          if [ "$clone_ok" != true ]; then
+            echo "Failed to clone https://github.com/theos/sdks.git after 3 attempts" >&2
+            exit 1
+          fi
+
+          git -C "$sdk_repo" sparse-checkout set iPhoneOS16.5.sdk
+          if [ ! -d "$sdk_repo/iPhoneOS16.5.sdk/usr/include" ]; then
+            echo "The SDK checkout is missing iPhoneOS16.5.sdk/usr/include" >&2
+            find "$sdk_repo" -mindepth 1 -maxdepth 2 -print >&2
+            exit 1
+          fi
+          cp -a "$sdk_repo/iPhoneOS16.5.sdk" "$THEOS/sdks/"
 
           test -x "$THEOS/toolchain/linux/iphone/ld"
           test -d "$THEOS/sdks/iPhoneOS16.5.sdk/usr/include"
