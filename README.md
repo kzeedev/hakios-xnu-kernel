@@ -1,14 +1,15 @@
-## Run HakiOS in a Droidspaces container
+## Run HakiOS in a Droidspaces container (open-kernel mode)
 
-This repo includes a single launcher script for a Debian Droidspaces container:
+This repo also includes a simple container launcher for the Apple-free HakiOS VM.
+
+Use it from a Debian Droidspaces container as root:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kzeedev/hakios-xnu-kernel/main/scripts/droidspaces-qemu.sh \
-  -o /usr/local/bin/hakios-qemu
-chmod +x /usr/local/bin/hakios-qemu
+curl -fsSL https://raw.githubusercontent.com/kzeedev/hakios-xnu-kernel/main/scripts/droidspaces-open-qemu.sh \
+  -o /usr/local/bin/hakios-open-qemu
+chmod +x /usr/local/bin/hakios-open-qemu
 
-# run as root inside the container
-hakios-qemu install
-hakios-qemu start
-hakios-qemu status
-hakios-qemu stop
+hakios-open-qemu install
+hakios-open-qemu start
+hakios-open-qemu status
+hakios-open-qemu stop

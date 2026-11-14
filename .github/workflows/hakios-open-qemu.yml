@@ -1,0 +1,94 @@
+name: HakiOS Open QEMU bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hakios-open-qemu.yml"
+      - "scripts/**"
+      - "Makefile"
+      - "qemu/**"
+      - "configs/**"
+      - "xnuloader/**"
+      - "userland/**"
+      - "prebuilt/**"
+  pull_request:
+    paths:
+      - ".github/workflows/hakios-open-qemu.yml"
+      - "scripts/**"
+      - "Makefile"
+      - "qemu/**"
+      - "configs/**"
+      - "xnuloader/**"
+      - "userland/**"
+      - "prebuilt/**"
+  workflow_dispatch:
+
+jobs:
+  build-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            git \
+            python3 \
+            qemu-system-arm \
+            qemu-efi-aarch64 \
+            qemu-utils \
+            clang \
+            lld \
+            xz-utils \
+            tar \
+            make
+
+      - name: Check whether open-kernel pieces already exist
+        id: check
+        run: |
+          if [ -f prebuilt/hakios-kernel ] && [ -f prebuilt/loader.efi ] && [ -f userland/hello ] && [ -f qemu/payload.bin ]; then
+            echo "needs_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the open-kernel HakiOS image if needed
+        if: steps.check.outputs.needs_build == 'true'
+        run: |
+          make kernel loader-open hello
+          make qemu-open
+
+      - name: Prepare bundle
+        run: |
+          mkdir -p dist
+          cp -a prebuilt dist/
+          cp -a qemu dist/
+          cp -a userland dist/
+          cp -a scripts dist/
+          tar -czf hakios-qemu-open-bundle.tar.gz -C dist .
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hakios-qemu-open-bundle
+          path: hakios-qemu-open-bundle.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release asset (optional)
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" hakios-qemu-open-bundle.tar.gz || echo "No release tag; skipping asset upload"
