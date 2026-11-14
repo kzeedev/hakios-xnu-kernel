@@ -31,11 +31,12 @@ jobs:
 
     env:
       DEBIAN_FRONTEND: noninteractive
+      THEOS: ${{ github.workspace }}/.theos
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -43,6 +44,41 @@ jobs:
             build-essential ca-certificates curl git python3 \
             clang lld flex bison m4 perl autoconf automake \
             xz-utils tar make qemu-system-arm qemu-efi-aarch64 qemu-utils
+
+      - name: Install Theos Linux toolchain and iPhoneOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$THEOS/toolchain/linux/iphone" "$THEOS/sdks"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          curl -fL --retry 3 \
+            https://github.com/sbingner/llvm-project/releases/latest/download/linux-ios-arm64e-clang-toolchain.tar.lzma \
+            -o "$tmp/toolchain.tar.lzma"
+          tar --lzma -xf "$tmp/toolchain.tar.lzma" -C "$tmp"
+          toolchain_dir="$(find "$tmp" -mindepth 1 -maxdepth 2 -type d -name ios-arm64e-clang-toolchain -print -quit)"
+          if [ -z "$toolchain_dir" ]; then
+            echo "Could not find ios-arm64e-clang-toolchain in the downloaded archive" >&2
+            exit 1
+          fi
+          cp -a "$toolchain_dir/." "$THEOS/toolchain/linux/iphone/"
+
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/theos/sdks.git "$tmp/sdks"
+          git -C "$tmp/sdks" sparse-checkout set iPhoneOS16.5.sdk
+          cp -a "$tmp/sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
+
+          test -x "$THEOS/toolchain/linux/iphone/ld"
+          test -d "$THEOS/sdks/iPhoneOS16.5.sdk/usr/include"
+
+      - name: Bootstrap XNU build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          source ./xnu-env.sh
+          xnu/apply.sh
+          xnu-deps/setup.sh
 
       - name: Build with repository scripts
         run: |
