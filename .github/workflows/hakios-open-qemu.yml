@@ -35,24 +35,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            ca-certificates \
-            curl \
-            git \
-            python3 \
-            qemu-system-arm \
-            qemu-efi-aarch64 \
-            qemu-utils \
-            clang \
-            lld \
-            xz-utils \
-            tar \
-            make
+            build-essential ca-certificates curl git python3 \
+            clang lld flex bison m4 perl autoconf automake \
+            xz-utils tar make qemu-system-arm qemu-efi-aarch64 qemu-utils
+
+      - name: Build with repository scripts
+        run: |
+          make kernel loader-open hello
+          xnuloader/mkpayload.py -o qemu/payload.bin \
+            kernel=hakios-kernel \
+            ramdisk=userland/hello \
+            --cmdline "$(tools/hakios-config.py args --defconfig defconfig)"
+          make prebuilt
 
       - name: Check whether open-kernel pieces already exist
         id: check
